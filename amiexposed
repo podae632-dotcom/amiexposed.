@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AM_I_EXPOSED? // breach &amp; leak checker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* explosive neon palette */
+      --bg:        #05000d;
+      --bg-2:      #0d0221;
+      --panel:     rgba(12, 3, 28, 0.72);
+      --panel-2:   rgba(20, 4, 42, 0.6);
+
+      --neon-green:  #39ff14;
+      --neon-cyan:   #00f0ff;
+      --neon-pink:   #ff00e5;
+      --neon-purple: #b026ff;
+      --neon-yellow: #faff00;
+      --neon-orange: #ff6a00;
+      --neon-red:    #ff1f4b;
+
+      --text:      #e6f9ff;
+      --muted:     #8b6bb8;
+
+      --border:    rgba(176, 38, 255, 0.32);
+      --border-hi: rgba(0, 240, 255, 0.75);
+
+      --radius:    6px;
+      --mono:      'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      --display:   'Share Tech Mono', var(--mono);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    [hidden] { display: none !important; }
+
+    ::selection { background: var(--neon-pink); color: #0a0014; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--mono);
+      background:
+        radial-gradient(ellipse 60% 40% at 15% 5%,  rgba(255,0,229,0.20), transparent 60%),
+        radial-gradient(ellipse 50% 40% at 85% 10%, rgba(0,240,255,0.18),  transparent 60%),
+        radial-gradient(ellipse 70% 50% at 50% 100%, rgba(176,38,255,0.22), transparent 65%),
+        linear-gradient(180deg, var(--bg-2) 0%, var(--bg) 60%, #000 100%);
+      background-attachment: fixed;
+      color: var(--text);
+      line-height: 1.65;
+      min-height: 100vh;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ---------- Matrix rain + overlays ---------- */
+    #matrix {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      opacity: 0.22;
+      pointer-events: none;
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 90;
+      pointer-events: none;
+    }
+
+    /* RGB scanlines */
+    .overlay-scan {
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(255,0,229,0.05) 0px,
+        rgba(0,0,0,0)        2px,
+        rgba(0,240,255,0.05) 3px,
+        rgba(0,0,0,0)        5px
+      );
+      mix-blend-mode: screen;
+      opacity: 0.85;
+    }
+
+    .overlay-glow {
+      background:
+        radial-gradient(ellipse at 50% 50%, rgba(0,240,255,0.05) 0%, transparent 55%),
+        radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(10,0,26,0.85) 100%);
+    }
+
+    /* horizontal color sweep */
+    .overlay-sweep::after {
+      content: '';
+      position: absolute;
+      left: 0; right: 0;
+      height: 180px;
+      background: linear-gradient(to bottom,
+        transparent,
+        rgba(255,0,229,0.10),
+        rgba(0,240,255,0.10),
+        transparent);
+      animation: sweep 7s linear infinite;
+      mix-blend-mode: screen;
+    }
+
+    @keyframes sweep {
+      0%   { top: -25%; }
+      100% { top: 125%; }
+    }
+
+    /* ---------- Layout ---------- */
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 5rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 2.25rem;
+    }
+
+    .logo {
+      font-family: var(--display);
+      font-size: clamp(1.7rem, 7vw, 2.9rem);
+      font-weight: 400;
+      letter-spacing: 4px;
+      display: inline-block;
+      position: relative;
+      line-height: 1.25;
+      background: linear-gradient(90deg,
+        var(--neon-green) 0%,
+        var(--neon-cyan)   25%,
+        var(--neon-pink)   50%,
+        var(--neon-purple) 75%,
+        var(--neon-yellow) 100%);
+      background-size: 300% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: hue-slide 8s linear infinite;
+      filter:
+        drop-shadow(0 0 6px rgba(255,0,229,0.8))
+        drop-shadow(0 0 20px rgba(0,240,255,0.55))
+        drop-shadow(0 0 42px rgba(176,38,255,0.35));
+    }
+
+    @keyframes hue-slide {
+      0%   { background-position:   0% 50%; }
+      100% { background-position: 300% 50%; }
+    }
+
+    .logo::before,
+    .logo::after {
+      content: attr(data-text);
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+      -webkit-background-clip: initial;
+      background: none;
+    }
+
+    .logo::before { color: var(--neon-cyan); animation: glitch-a 6s infinite steps(1); }
+    .logo::after  { color: var(--neon-pink); animation: glitch-b 6s infinite steps(1); }
+
+    @keyframes glitch-a {
+      0%, 90%, 100% { opacity: 0; transform: none; clip-path: none; }
+      91% { opacity: .85; transform: translate(-3px, 1px); clip-path: inset(10% 0 60% 0); }
+      93% { opacity: .85; transform: translate(3px, -1px); clip-path: inset(55% 0 20% 0); }
+      95% { opacity: .7;  transform: translate(-2px, 0);   clip-path: inset(30% 0 45% 0); }
+      97% { opacity: .7;  transform: translate(2px, 1px);  clip-path: inset(70% 0 8% 0); }
+    }
+
+    @keyframes glitch-b {
+      0%, 91%, 100% { opacity: 0; transform: none; clip-path: none; }
+      92% { opacity: .7; transform: translate(3px, -1px); clip-path: inset(40% 0 35% 0); }
+      94% { opacity: .7; transform: translate(-3px, 1px); clip-path: inset(15% 0 70% 0); }
+      96% { opacity: .6; transform: translate(2px, 0);    clip-path: inset(65% 0 12% 0); }
+    }
+
+    .tagline {
+      color: #b79ce0;
+      font-size: 0.82rem;
+      letter-spacing: 0.6px;
+      margin-top: 0.6rem;
+    }
+
+    .tagline::before { content: '// '; color: var(--neon-pink); text-shadow: 0 0 10px var(--neon-pink); }
+
+    /* ---------- Terminal window ---------- */
+    .term {
+      position: relative;
+      background: var(--panel);
+      border-radius: var(--radius);
+      backdrop-filter: blur(8px);
+      box-shadow:
+        0 0 0 1px rgba(0,0,0,0.7),
+        0 0 24px rgba(255,0,229,0.20),
+        0 0 60px rgba(0,240,255,0.12),
+        inset 0 0 60px rgba(176,38,255,0.05);
+      overflow: hidden;
+    }
+
+    /* animated gradient border */
+    .term::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: var(--radius);
+      padding: 1px;
+      background: linear-gradient(115deg,
+        var(--neon-cyan),
+        var(--neon-pink),
+        var(--neon-purple),
+        var(--neon-green),
+        var(--neon-cyan));
+      background-size: 300% 300%;
+      animation: border-flow 6s linear infinite;
+      -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+              mask-composite: exclude;
+      pointer-events: none;
+      opacity: 0.85;
+    }
+
+    @keyframes border-flow {
+      0%   { background-position:   0% 50%; }
+      100% { background-position: 300% 50%; }
+    }
+
+    .term-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.55rem 0.9rem;
+      background: linear-gradient(90deg, rgba(255,0,229,0.14), rgba(0,240,255,0.14));
+      border-bottom: 1px solid var(--border);
+      font-size: 0.7rem;
+      color: #d8c7ff;
+      letter-spacing: 1.4px;
+    }
+
+    .term-dots { display: flex; gap: 0.35rem; }
+
+    .term-dots i {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      display: block;
+    }
+    .term-dots i:nth-child(1) { background: var(--neon-red);    box-shadow: 0 0 10px var(--neon-red); }
+    .term-dots i:nth-child(2) { background: var(--neon-yellow); box-shadow: 0 0 10px var(--neon-yellow); }
+    .term-dots i:nth-child(3) { background: var(--neon-green);  box-shadow: 0 0 10px var(--neon-green); }
+
+    .term-title { margin-left: auto; color: var(--neon-cyan); text-shadow: 0 0 8px rgba(0,240,255,0.7); }
+
+    .term-body { padding: 1.55rem; }
+
+    .search-card { margin-bottom: 1.75rem; }
+
+    /* ---------- Input row ---------- */
+    .input-group {
+      display: flex;
+      align-items: stretch;
+      gap: 0.6rem;
+      margin-bottom: 1rem;
+    }
+
+    .prompt {
+      display: flex;
+      align-items: center;
+      font-weight: 700;
+      font-size: 0.95rem;
+      white-space: nowrap;
+      user-select: none;
+      background: linear-gradient(90deg, var(--neon-green), var(--neon-cyan));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      filter: drop-shadow(0 0 8px rgba(0,240,255,0.7));
+    }
+
+    input[type="text"],
+    input[type="email"] {
+      flex: 1;
+      min-width: 0;
+      background: rgba(3, 0, 12, 0.7);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.85rem 0.95rem;
+      color: var(--neon-cyan);
+      caret-color: var(--neon-pink);
+      font-family: var(--mono);
+      font-size: 0.95rem;
+      letter-spacing: 0.5px;
+      outline: none;
+      transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
+    }
+
+    input::placeholder { color: #6a4f96; letter-spacing: 0.3px; }
+
+    input:focus {
+      border-color: var(--neon-pink);
+      background: rgba(20, 0, 40, 0.8);
+      box-shadow:
+        0 0 0 3px rgba(255,0,229,0.18),
+        0 0 22px rgba(255,0,229,0.35),
+        inset 0 0 18px rgba(255,0,229,0.08);
+    }
+
+    input[aria-invalid="true"] {
+      border-color: var(--neon-red);
+      box-shadow: 0 0 0 3px rgba(255,31,75,0.22), 0 0 22px rgba(255,31,75,0.4);
+    }
+
+    /* ---------- Buttons ---------- */
+    button {
+      font-family: var(--display);
+      position: relative;
+      background: linear-gradient(135deg, var(--neon-pink), var(--neon-purple));
+      color: #0a0014;
+      border: none;
+      border-radius: var(--radius);
+      padding: 0.85rem 1.45rem;
+      font-size: 0.85rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: transform 0.1s, box-shadow 0.2s, filter 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      box-shadow:
+        0 0 18px rgba(255,0,229,0.55),
+        0 0 40px rgba(176,38,255,0.35),
+        inset 0 0 12px rgba(255,255,255,0.12);
+      overflow: hidden;
+    }
+
+    button::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.55) 50%, transparent 70%);
+      transform: translateX(-130%);
+      transition: transform 0.5s ease;
+    }
+
+    button:hover:not(:disabled) {
+      filter: brightness(1.15) saturate(1.2);
+      box-shadow:
+        0 0 28px rgba(255,0,229,0.9),
+        0 0 60px rgba(0,240,255,0.55),
+        inset 0 0 14px rgba(255,255,255,0.2);
+    }
+
+    button:hover:not(:disabled)::after { transform: translateX(130%); }
+
+    button:active:not(:disabled) { transform: translateY(1px); }
+
+    button:focus-visible {
+      outline: 2px solid var(--neon-cyan);
+      outline-offset: 3px;
+    }
+
+    button:disabled {
+      filter: grayscale(0.55) brightness(0.7);
+      cursor: not-allowed;
+      box-shadow: 0 0 12px rgba(176,38,255,0.25);
+    }
+
+    .hint {
+      font-size: 0.72rem;
+      color: #8b6bb8;
+      letter-spacing: 0.3px;
+    }
+
+    .hint::before { content: '# '; color: var(--neon-green); text-shadow: 0 0 8px var(--neon-green); }
+
+    /* ---------- Results ---------- */
+    #results { display: none; margin-top: 1.75rem; }
+    #results.is-visible { display: block; animation: fade-up 0.35s ease both; }
+
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: none; }
+    }
+
+    .cmd-echo {
+      font-size: 0.75rem;
+      color: #b79ce0;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px dashed rgba(255,0,229,0.35);
+      word-break: break-all;
+    }
+
+    .cmd-echo::before {
+      content: '$ ';
+      color: var(--neon-cyan);
+      text-shadow: 0 0 8px var(--neon-cyan);
+    }
+
+    .result-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.25rem;
+    }
+
+    .result-header h2 {
+      font-family: var(--display);
+      font-size: 1.05rem;
+      font-weight: 400;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      background: linear-gradient(90deg, var(--neon-cyan), var(--neon-green));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      filter: drop-shadow(0 0 10px rgba(0,240,255,0.5));
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.28rem 0.75rem;
+      border-radius: 3px;
+      font-family: var(--display);
+      font-size: 0.75rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      background: rgba(0,0,0,0.5);
+      animation: badge-pulse 1.8s ease-in-out infinite;
+    }
+
+    @keyframes badge-pulse {
+      0%, 100% { filter: brightness(1); }
+      50%      { filter: brightness(1.35); }
+    }
+
+    .status-exposed {
+      color: var(--neon-red);
+      border: 1px solid var(--neon-red);
+      text-shadow: 0 0 10px rgba(255,31,75,0.9);
+      box-shadow: 0 0 20px rgba(255,31,75,0.5), inset 0 0 16px rgba(255,31,75,0.15);
+    }
+
+    .status-clean {
+      color: var(--neon-green);
+      border: 1px solid var(--neon-green);
+      text-shadow: 0 0 10px rgba(57,255,20,0.9);
+      box-shadow: 0 0 20px rgba(57,255,20,0.5), inset 0 0 16px rgba(57,255,20,0.15);
+    }
+
+    /* ---------- Breach cards ---------- */
+    .breach-card {
+      position: relative;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--neon-pink);
+      border-radius: var(--radius);
+      padding: 1.1rem 1.2rem;
+      margin-bottom: 0.95rem;
+      transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+      overflow: hidden;
+    }
+
+    .breach-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg,
+        var(--neon-pink), var(--neon-purple), var(--neon-cyan), var(--neon-green));
+      background-size: 300% 100%;
+      animation: hue-slide 5s linear infinite;
+      opacity: 0.85;
+    }
+
+    .breach-card:hover {
+      border-color: var(--border-hi);
+      border-left-color: var(--neon-cyan);
+      box-shadow:
+        0 0 24px rgba(0,240,255,0.22),
+        0 0 48px rgba(255,0,229,0.14);
+      transform: translateX(3px);
+    }
+
+    .breach-title {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      flex-wrap: wrap;
+      font-family: var(--display);
+      font-size: 1rem;
+      letter-spacing: 1.5px;
+      color: #ffffff;
+      margin-bottom: 0.4rem;
+      text-shadow: 0 0 10px rgba(0,240,255,0.5);
+    }
+
+    .breach-title .severity { order: -1; }
+
+    .breach-date {
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.5px;
+      color: #b79ce0;
+      font-weight: 400;
+    }
+
+    .breach-date::before { content: '['; color: var(--neon-cyan); }
+    .breach-date::after  { content: ']'; color: var(--neon-cyan); }
+
+    .breach-data {
+      font-size: 0.78rem;
+      color: #a58cd0;
+      margin-top: 0.55rem;
+      letter-spacing: 0.4px;
+    }
+
+    .data-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin-top: 0.6rem;
+    }
+
+    .tag {
+      padding: 0.18rem 0.6rem;
+      border-radius: 3px;
+      font-size: 0.7rem;
+      letter-spacing: 0.7px;
+      background: rgba(0,240,255,0.08);
+      border: 1px solid rgba(0,240,255,0.4);
+      color: var(--neon-cyan);
+      text-shadow: 0 0 6px rgba(0,240,255,0.6);
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .tag:hover {
+      background: rgba(0,240,255,0.22);
+      color: #fff;
+    }
+
+    /* severity chips */
+    .severity {
+      font-family: var(--display);
+      font-size: 0.68rem;
+      font-weight: 400;
+      letter-spacing: 1.8px;
+      text-transform: uppercase;
+      padding: 0.15rem 0.55rem;
+      border-radius: 3px;
+      border: 1px solid currentColor;
+      background: rgba(0,0,0,0.45);
+    }
+
+    .sev-low {
+      color: var(--neon-cyan);
+      text-shadow: 0 0 10px rgba(0,240,255,0.9);
+      box-shadow: 0 0 14px rgba(0,240,255,0.4);
+    }
+    .sev-medium {
+      color: var(--neon-yellow);
+      text-shadow: 0 0 10px rgba(250,255,0,0.9);
+      box-shadow: 0 0 14px rgba(250,255,0,0.4);
+    }
+    .sev-high {
+      color: var(--neon-orange);
+      text-shadow: 0 0 10px rgba(255,106,0,0.9);
+      box-shadow: 0 0 14px rgba(255,106,0,0.4);
+    }
+    .sev-critical {
+      color: var(--neon-red);
+      text-shadow: 0 0 10px rgba(255,31,75,0.95);
+      box-shadow: 0 0 14px rgba(255,31,75,0.55);
+      animation: badge-pulse 1.2s ease-in-out infinite;
+    }
+
+    /* ---------- Next steps ---------- */
+    .next-steps {
+      position: relative;
+      background: var(--panel);
+      border: 1px solid rgba(57,255,20,0.4);
+      border-radius: var(--radius);
+      padding: 1.5rem 1.35rem 0.9rem;
+      margin-top: 1.5rem;
+      box-shadow: 0 0 24px rgba(57,255,20,0.12), inset 0 0 30px rgba(57,255,20,0.04);
+    }
+
+    .next-steps::before {
+      content: '>> RECOMMENDED_NEXT_STEPS';
+      position: absolute;
+      top: -0.62rem;
+      left: 0.9rem;
+      background: var(--bg-2);
+      padding: 0 0.55rem;
+      font-family: var(--display);
+      font-size: 0.7rem;
+      letter-spacing: 2px;
+      color: var(--neon-green);
+      text-shadow: 0 0 10px rgba(57,255,20,0.9);
+    }
+
+    .next-steps h3 {
+      position: absolute;
+      width: 1px; height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    .step {
+      display: flex;
+      gap: 0.85rem;
+      margin-bottom: 0.9rem;
+      align-items: flex-start;
+      font-size: 0.85rem;
+      color: #cbb8f0;
+    }
+
+    .step-num {
+      font-family: var(--display);
+      font-size: 0.78rem;
+      letter-spacing: 1px;
+      flex-shrink: 0;
+      padding-top: 0.05rem;
+      min-width: 2.4rem;
+      background: linear-gradient(90deg, var(--neon-green), var(--neon-cyan));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      filter: drop-shadow(0 0 8px rgba(57,255,20,0.7));
+    }
+
+    /* ---------- Monitor ---------- */
+    .monitor-card {
+      position: relative;
+      margin-top: 2rem;
+      padding: 1.85rem 1.5rem;
+      text-align: center;
+      border-radius: var(--radius);
+      background:
+        linear-gradient(135deg, rgba(255,0,229,0.10), rgba(0,240,255,0.10)),
+        var(--panel);
+      box-shadow:
+        0 0 28px rgba(255,0,229,0.18),
+        0 0 60px rgba(0,240,255,0.12),
+        inset 0 0 60px rgba(176,38,255,0.05);
+      overflow: hidden;
+    }
+
+    .monitor-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: var(--radius);
+      padding: 1px;
+      background: linear-gradient(115deg,
+        var(--neon-yellow), var(--neon-pink), var(--neon-cyan), var(--neon-green), var(--neon-yellow));
+      background-size: 300% 300%;
+      animation: border-flow 7s linear infinite;
+      -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+              mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    .monitor-card h3 {
+      font-family: var(--display);
+      font-size: 1.1rem;
+      font-weight: 400;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      background: linear-gradient(90deg, var(--neon-pink), var(--neon-yellow), var(--neon-cyan));
+      background-size: 200% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: hue-slide 5s linear infinite;
+      filter: drop-shadow(0 0 12px rgba(255,0,229,0.6));
+      margin-bottom: 0.55rem;
+    }
+
+    .monitor-card h3::before { content: '> '; color: var(--neon-green); -webkit-text-fill-color: var(--neon-green); }
+
+    .monitor-card p {
+      color: #b79ce0;
+      font-size: 0.82rem;
+      margin-bottom: 1.25rem;
+      max-width: 46ch;
+      margin-left: auto;
+      margin-right: auto;
+      position: relative;
+    }
+
+    .monitor-form {
+      display: flex;
+      gap: 0.6rem;
+      max-width: 480px;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    #monitorBtn {
+      background: linear-gradient(135deg, var(--neon-cyan), var(--neon-green));
+      box-shadow:
+        0 0 18px rgba(0,240,255,0.55),
+        0 0 40px rgba(57,255,20,0.35),
+        inset 0 0 12px rgba(255,255,255,0.15);
+    }
+
+    #monitorBtn:hover:not(:disabled) {
+      box-shadow:
+        0 0 28px rgba(0,240,255,0.95),
+        0 0 60px rgba(57,255,20,0.6),
+        inset 0 0 14px rgba(255,255,255,0.22);
+    }
+
+    /* ---------- Footer ---------- */
+    footer {
+      text-align: center;
+      margin-top: 3rem;
+      color: #6a4f96;
+      font-size: 0.72rem;
+      letter-spacing: 0.5px;
+      line-height: 1.9;
+    }
+
+    footer p::before { content: '/* '; color: var(--neon-pink); }
+    footer p::after  { content: ' */'; color: var(--neon-pink); }
+
+    footer a { color: var(--neon-cyan); text-decoration: none; border-bottom: 1px dotted var(--neon-cyan); }
+    footer a:hover { color: var(--neon-pink); text-shadow: 0 0 10px var(--neon-pink); border-bottom-color: var(--neon-pink); }
+
+    /* ---------- Spinner ---------- */
+    .spinner {
+      display: none;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,0.25);
+      border-top-color: #fff;
+      border-right-color: var(--neon-yellow);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    button.is-loading .spinner { display: block; }
+    button.is-loading .btn-label { display: none; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* blinking cursor */
+    .cursor {
+      display: inline-block;
+      width: 0.6em;
+      height: 1em;
+      background: var(--neon-green);
+      vertical-align: -0.15em;
+      margin-left: 0.3rem;
+      box-shadow: 0 0 12px var(--neon-green), 0 0 24px rgba(57,255,20,0.5);
+      animation: blink 1.05s steps(1) infinite;
+    }
+
+    @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+
+    /* ---------- Accessibility ---------- */
+    .sr-only {
+      position: absolute;
+      width: 1px; height: 1px;
+      padding: 0; margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+      }
+      html { scroll-behavior: auto; }
+      .overlay-sweep::after { display: none; }
+      .cursor { opacity: 1; }
+      .logo { animation: none; background-position: 0% 50%; }
+    }
+
+    /* ---------- Responsive ---------- */
+    @media (max-width: 560px) {
+      .container { padding: 1.75rem 1rem 3.5rem; }
+      .input-group,
+      .monitor-form { flex-direction: column; }
+      .prompt { padding-bottom: 0.15rem; }
+      button { width: 100%; }
+      .term-body { padding: 1.2rem; }
+      .breach-date { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="matrix" aria-hidden="true"></canvas>
+  <div class="overlay overlay-scan" aria-hidden="true"></div>
+  <div class="overlay overlay-glow overlay-sweep" aria-hidden="true"></div>
+
+  <div class="container">
+    <header>
+      <h1 class="logo" data-text="AM_I_EXPOSED?">AM_I_EXPOSED?</h1>
+      <p class="tagline">check if your email, username or domain appears in known breaches &amp; public leaks<span class="cursor" aria-hidden="true"></span></p>
+    </header>
+
+    <!-- ===== Search terminal ===== -->
+    <section class="term search-card" aria-labelledby="searchHeading">
+      <div class="term-bar">
+        <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="term-title">./breach_check.sh</span>
+      </div>
+      <div class="term-body">
+        <h2 id="searchHeading" class="sr-only">Check an identifier for exposure</h2>
+        <div class="input-group">
+          <span class="prompt" aria-hidden="true">[root@exposed ~]$</span>
+          <label class="sr-only" for="query">Email, username or domain</label>
+          <input
+            type="text"
+            id="query"
+            placeholder="email / username / domain..."
+            autocomplete="off"
+            autocapitalize="none"
+            autocorrect="off"
+            spellcheck="false"
+          />
+          <button id="checkBtn" type="button">
+            <span class="btn-label">Run Check</span>
+            <span class="spinner" aria-hidden="true"></span>
+          </button>
+        </div>
+        <p class="hint">no data stored — queries are not logged</p>
+      </div>
+    </section>
+
+    <!-- ===== Results ===== -->
+    <section id="results" aria-live="polite" aria-labelledby="resultTitle">
+      <div class="cmd-echo" id="cmdEcho" aria-hidden="true"></div>
+
+      <div class="result-header">
+        <h2 id="resultTitle">Results</h2>
+        <span id="statusBadge" class="status-badge"></span>
+      </div>
+
+      <div id="breachList"></div>
+
+      <div class="next-steps" id="nextSteps" hidden>
+        <h3>Recommended Next Steps</h3>
+        <div class="step">
+          <div class="step-num">[01]</div>
+          <div>Change the password on this account immediately — and on any other account that reuses it.</div>
+        </div>
+        <div class="step">
+          <div class="step-num">[02]</div>
+          <div>Enable two-factor authentication (2FA) wherever it is offered.</div>
+        </div>
+        <div class="step">
+          <div class="step-num">[03]</div>
+          <div>Audit related accounts that share the same email address or username.</div>
+        </div>
+        <div class="step">
+          <div class="step-num">[04]</div>
+          <div>Adopt a password manager to generate and store unique, strong passwords.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Monitoring ===== -->
+    <section class="monitor-card" aria-labelledby="monitorHeading">
+      <h3 id="monitorHeading">Alert Service</h3>
+      <p>Arm a monitor on this identifier. You'll be pinged if it surfaces in a new breach dump or paste site.</p>
+      <div class="monitor-form">
+        <label class="sr-only" for="monitorEmail">Notification email</label>
+        <input type="email" id="monitorEmail" placeholder="alert destination email" autocomplete="email" />
+        <button id="monitorBtn" type="button">Arm Monitor</button>
+      </div>
+    </section>
+
+    <footer>
+      <p>built for awareness — data sourced from public breach collections</p>
+      <p>not affiliated with any official service — educational / personal use only</p>
+    </footer>
+  </div>
+
+  <script>
+    'use strict';
+
+    /* ==================================================================
+     * DEMO DATA — fabricated examples for UI development only.
+     * Replace `lookup()` with a real server-side request before shipping.
+     * ================================================================== */
+    const DEMO_BREACHES = {
+      'test@example.com': [
+        { name: 'Adobe',         date: '2013-10', severity: 'high',     data: ['Email addresses', 'Password hints', 'Encrypted passwords'] },
+        { name: 'LinkedIn',      date: '2012-06', severity: 'high',     data: ['Email addresses', 'Passwords'] },
+        { name: 'Collection #1', date: '2019-01', severity: 'critical', data: ['Email addresses', 'Passwords'] }
+      ],
+      'admin': [
+        { name: 'Example Paste Dump', date: '2023-08', severity: 'medium', data: ['Usernames', 'IP addresses'] }
+      ]
+    };
+
+    const SEVERITY_ORDER = { low: 1, medium: 2, high: 3, critical: 4 };
+    const VALID_QUERY = /^[a-z0-9._%+@-]{3,254}$/i;
+
+    const els = {
+      query:        document.getElementById('query'),
+      checkBtn:     document.getElementById('checkBtn'),
+      results:      document.getElementById('results'),
+      cmdEcho:      document.getElementById('cmdEcho'),
+      title:        document.getElementById('resultTitle'),
+      badge:        document.getElementById('statusBadge'),
+      list:         document.getElementById('breachList'),
+      nextSteps:    document.getElementById('nextSteps'),
+      monitorEmail: document.getElementById('monitorEmail'),
+      monitorBtn:   document.getElementById('monitorBtn')
+    };
+
+    /* ------------------------- helpers ------------------------- */
+
+    const normalize = (raw) => raw.trim().toLowerCase();
+
+    function isValidQuery(q) {
+      return VALID_QUERY.test(q) && !q.startsWith('@') && !q.endsWith('@') && !q.includes('..');
+    }
+
+    /* Build every node with createElement / textContent — never innerHTML.
+       This removes the XSS surface entirely, which matters a lot once real
+       API data flows into these cards. */
+    function renderBreachCard(breach) {
+      const card = document.createElement('div');
+      card.className = 'breach-card';
+
+      const titleRow = document.createElement('div');
+      titleRow.className = 'breach-title';
+
+      const name = document.createElement('span');
+      name.textContent = breach.name;
+
+      const date = document.createElement('span');
+      date.className = 'breach-date';
+      date.textContent = breach.date;
+
+      titleRow.append(name, date);
+
+      if (breach.severity && SEVERITY_ORDER[breach.severity]) {
+        const sev = document.createElement('span');
+        sev.className = 'severity sev-' + breach.severity;
+        sev.textContent = breach.severity;
+        titleRow.appendChild(sev);   // CSS `order:-1` floats it to the left
+      }
+
+      const label = document.createElement('div');
+      label.className = 'breach-data';
+      label.textContent = '> exposed fields:';
+
+      const tags = document.createElement('div');
+      tags.className = 'data-tags';
+      breach.data.forEach(item => {
+        const tag = document.createElement('span');
+        tag.className = 'tag';
+        tag.textContent = item;
+        tags.appendChild(tag);
+      });
+
+      card.append(titleRow, label, tags);
+      return card;
+    }
+
+    function setBadge(kind) {
+      if (kind === 'exposed') {
+        els.badge.className = 'status-badge status-exposed';
+        els.badge.textContent = '[!] EXPOSED';
+      } else if (kind === 'error') {
+        els.badge.className = 'status-badge status-exposed';
+        els.badge.textContent = '[x] ERROR';
+      } else {
+        els.badge.className = 'status-badge status-clean';
+        els.badge.textContent = '[✓] NO MATCH';
+      }
+    }
+
+    function setLoading(isLoading) {
+      els.checkBtn.disabled = isLoading;
+      els.checkBtn.classList.toggle('is-loading', isLoading);
+      els.checkBtn.setAttribute('aria-busy', String(isLoading));
+    }
+
+    function scrollToResults() {
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      els.results.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    }
+
+    /* ------------------------- main flow ------------------------- */
+
+    /* Stub — swap for:  const res = await fetch('/api/check?q=' + encodeURIComponent(query)); */
+    async function lookup(query) {
+      await new Promise(r => setTimeout(r, 750));
+      return DEMO_BREACHES[query] ?? [];
+    }
+
+    async function checkExposure() {
+      const query = normalize(els.query.value);
+
+      if (!query) {
+        els.query.focus();
+        return;
+      }
+
+      if (!isValidQuery(query)) {
+        renderError(query, 'invalid target — expected an email, username or domain (3+ chars).');
+        return;
+      }
+
+      els.query.setAttribute('aria-invalid', 'false');
+      setLoading(true);
+
+      try {
+        const breaches = await lookup(query);
+        showResults(query, breaches);
+      } catch (err) {
+        console.error(err);
+        renderError(query, 'lookup failed — connection error. try again.');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function renderError(query, message) {
+      els.results.classList.add('is-visible');
+      els.cmdEcho.textContent = './breach_check.sh --target ' + query;
+      els.title.textContent = 'Check Failed';
+      setBadge('error');
+      els.list.replaceChildren();
+
+      const box = document.createElement('div');
+      box.className = 'breach-card';
+      box.style.color = 'var(--muted)';
+      box.textContent = '! ' + message;
+      els.list.appendChild(box);
+
+      els.nextSteps.hidden = true;
+      scrollToResults();
+    }
+
+    function showResults(query, breaches) {
+      els.results.classList.add('is-visible');
+      els.cmdEcho.textContent = './breach_check.sh --target ' + query;
+      els.list.replaceChildren();
+
+      if (breaches.length === 0) {
+        els.title.textContent = 'No Known Exposures';
+        setBadge('clean');
+
+        const box = document.createElement('div');
+        box.className = 'breach-card';
+        box.style.textAlign = 'center';
+        box.style.color = 'var(--muted)';
+        box.textContent =
+          '[ok] target not present in the indexed breach and paste collections.';
+        els.list.appendChild(box);
+
+        els.nextSteps.hidden = true;
+      } else {
+        // Highest severity first, newest first within a severity band.
+        const sorted = [...breaches].sort((a, b) =>
+          (SEVERITY_ORDER[b.severity] ?? 0) - (SEVERITY_ORDER[a.severity] ?? 0) ||
+          b.date.localeCompare(a.date)
+        );
+
+        els.title.textContent =
+          'Found In ' + sorted.length + ' Breach' + (sorted.length > 1 ? 'es' : '');
+        setBadge('exposed');
+
+        sorted.forEach(b => els.list.appendChild(renderBreachCard(b)));
+        els.nextSteps.hidden = false;
+      }
+
+      scrollToResults();
+    }
+
+    /* ------------------------- monitoring ------------------------- */
+
+    function startMonitoring() {
+      const email = normalize(els.monitorEmail.value);
+      const ok = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+
+      if (!ok) {
+        els.monitorEmail.setAttribute('aria-invalid', 'true');
+        els.monitorEmail.focus();
+        return;
+      }
+
+      els.monitorEmail.setAttribute('aria-invalid', 'false');
+      els.monitorBtn.disabled = true;
+      els.monitorBtn.textContent = 'Arming…';
+
+      // In production: POST to your backend, then send a confirmation email.
+      setTimeout(() => {
+        els.monitorBtn.disabled = false;
+        els.monitorBtn.textContent = 'Arm Monitor';
+        alert(
+          '[ monitor armed — demo ]\n\n' +
+          'A confirmation would be sent to: ' + email + '\n\n' +
+          'No real monitoring is active in this build.'
+        );
+      }, 650);
+    }
+
+    /* ------------------------- wiring ------------------------- */
+
+    els.checkBtn.addEventListener('click', checkExposure);
+    els.monitorBtn.addEventListener('click', startMonitoring);
+
+    els.query.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); checkExposure(); }
+    });
+
+    els.monitorEmail.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); startMonitoring(); }
+    });
+
+    /* ------------------------- matrix rain (multi-color) ------------------------- */
+
+    (function matrixRain() {
+      const canvas = document.getElementById('matrix');
+      if (!canvas) return;
+
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const ctx = canvas.getContext('2d');
+      const GLYPHS = 'アカサタナハマヤラワｱｲｳｴｵ0123456789ABCDEF<>/\\[]{}$#@%&*+=;:';
+      const FONT_SIZE = 16;
+      const FILL = 'rgba(5, 0, 13, 0.10)';
+
+      // explosive neon column palette
+      const NEONS = [
+        '#ff00e5', // pink
+        '#00f0ff', // cyan
+        '#39ff14', // green
+        '#b026ff', // purple
+        '#faff00', // yellow
+        '#ff6a00', // orange
+        '#ff1f4b'  // red
+      ];
+
+      let cols = 0;
+      let drops = [];
+      let colColors = [];
+
+      function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        cols = Math.ceil(canvas.width / FONT_SIZE);
+        drops = new Array(cols).fill(0).map(() => Math.random() * -60);
+        colColors = new Array(cols).fill(0).map(
+          () => NEONS[(Math.random() * NEONS.length) | 0]
+        );
+      }
+
+      function draw() {
+        ctx.fillStyle = FILL;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.font = FONT_SIZE + 'px monospace';
+
+        for (let i = 0; i < cols; i++) {
+          const glyph = GLYPHS[(Math.random() * GLYPHS.length) | 0];
+          const y = drops[i] * FONT_SIZE;
+          const color = colColors[i];
+
+          // occasionally flash white for a hot "spark"
+          const spark = Math.random() > 0.985;
+          ctx.fillStyle = spark ? '#ffffff' : color;
+          if (spark) {
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 14;
+          }
+          ctx.fillText(glyph, i * FONT_SIZE, y);
+          ctx.shadowBlur = 0;
+
+          if (y > canvas.height && Math.random() > 0.975) {
+            drops[i] = 0;
+            // re-roll the color for this column so the rain keeps shifting hue
+            colColors[i] = NEONS[(Math.random() * NEONS.length) | 0];
+          }
+          drops[i]++;
+        }
+      }
+
+      resize();
+      window.addEventListener('resize', resize);
+
+      if (reduce) {
+        ctx.fillStyle = 'rgba(5,0,13,0.9)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        draw();
+        return;
+      }
+
+      setInterval(draw, 55);
+    })();
+  </script>
+</body>
+</html>
